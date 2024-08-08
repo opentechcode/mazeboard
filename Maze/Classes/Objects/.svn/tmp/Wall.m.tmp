@@ -1,0 +1,60 @@
+//
+//  Wall.m
+//  Maze
+//
+//  Created by Ali Imran on 5/31/11.
+//  Copyright 2011 __MyCompanyName__. All rights reserved.
+//
+
+#import "Wall.h"
+
+
+@implementation Wall
+
+
+-(id)initWithSpace:(cpSpace *)theSpace location:(CGPoint)location spriteFrameName:(NSString *)spriteFrameName
+{
+	self = [super initWithSpace:theSpace location:location spriteFrameName:spriteFrameName];
+	return self;
+}
+
+
+-(void)createBodyAtLocation:(CGPoint)location
+{
+    
+    body = cpBodyNewStatic();
+    body->data = self;
+    body->p = location;
+    
+    int num = 4;
+    
+    CGPoint verts[] =
+    {   
+        ccp(-self.contentSize.width/2, -self.contentSize.height/2),
+        ccp(-self.contentSize.width/2, self.contentSize.height/2),
+        ccp(self.contentSize.width/2, self.contentSize.height/2),
+        ccp(self.contentSize.width/2, -self.contentSize.height/2)
+        
+    };
+    
+    shape = cpPolyShapeNew(body, num, verts, CGPointZero);
+    shape->e = 0.6;
+    shape->u = 0.0;
+    shape->data = self;
+    shape->group = 1;
+    shape->collision_type = 1;
+    cpSpaceAddShape(space, shape);
+	
+	[self setPosition:location];
+	
+}
+
+
+- (void) dealloc
+{
+    //NSLog(@"~ dealloc - Wall ~");
+    [super dealloc];
+}
+
+
+@end

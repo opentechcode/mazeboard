@@ -1,0 +1,27 @@
+//
+//  FBManager.h
+//  Maze
+//
+//  Created by Ali Imran on 8/11/11.
+//  Copyright 2011 __MyCompanyName__. All rights reserved.
+//
+
+#import <Foundation/Foundation.h>
+#import "FBConnect.h"
+
+@interface FBManager : NSObject <FBSessionDelegate, FBDialogDelegate, FBRequestDelegate> {
+    
+    
+    Facebook *facebook;
+    
+    
+}
+
+@property (nonatomic, retain) Facebook *facebook;
+
+
+- (BOOL) handleOpenUrl:(NSURL*) url;
+- (void) postToWall:(int) seconds andLevel: (NSString *) level;
+- (void) getFacebookName;
+
+@end

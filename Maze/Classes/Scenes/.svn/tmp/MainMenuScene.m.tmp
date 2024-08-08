@@ -1,0 +1,194 @@
+//
+//  MainMenuScene.m
+//  Maze
+//
+//  Created by Ali Imran on 5/3/11.
+//  Copyright 2011 __MyCompanyName__. All rights reserved.
+//
+
+#import "MainMenuScene.h"
+#import "Constant.h"
+#import "GameManager.h"
+#import "MazeSounds.h"
+
+#import "MailComposeViewController.h"
+
+@implementation MainMenuScene
+
+@synthesize newGameImage, optionsImage, aboutImage, inviteFriendsImage, moreGamesImage, menu, leaderboard, createMaze, headerLayer, localHighScoreImage;
+
+- (id) init
+{
+    if ((self = [super init])) {
+        
+        headerLayer = [[HeaderLayer alloc] initWithHeading:@"txt_heading_mainMenu"];
+        [self addChild:headerLayer];
+        
+		[self drawComponents];
+		[self setComponentsPositions];
+		
+		self.menu = [CCMenu menuWithItems: newGameImage, leaderboard, optionsImage, aboutImage, moreGamesImage, inviteFriendsImage, localHighScoreImage, nil];
+		[self.menu setPosition:CGPointMake(0, 0)];
+		[self addChild:self.menu];
+        
+    }
+    return self;
+}
+
+
+
+- (void) drawComponents
+{
+    newGameImage = [CCMenuItemImage itemFromNormalImage:@"newGame_unpress.png" selectedImage:@"newGame_press.png" 
+                                                 target:self selector:@selector(levelSelectionScene:)];
+    
+    createMaze = [CCMenuItemImage itemFromNormalImage:@"createMaze_unpress.png" selectedImage:@"createMaze_press.png"
+                                                     target:self
+                                                   selector:@selector(createMazeScene:)];
+    
+    leaderboard = [CCMenuItemImage itemFromNormalImage:@"leaderboard_unpress.png" selectedImage:@"leaderboard_press.png" 
+                                                target:self selector:@selector(showLeaderboard:)];	
+    
+    optionsImage = [CCMenuItemImage itemFromNormalImage:@"options_unpress.png" selectedImage:@"options_press.png"
+                                                 target:self selector:@selector(optionScene:)];
+    
+    aboutImage = [CCMenuItemImage itemFromNormalImage:@"about_unpress.png" selectedImage:@"about_press.png"
+                                               target:self selector:@selector(helpScene:)];	
+    
+    moreGamesImage = [CCMenuItemImage itemFromNormalImage:@"moreGame_unpress.png" selectedImage:@"moreGame_press.png"
+                                                   target:self selector:@selector(moregamesUrl:)];
+    
+    inviteFriendsImage = [CCMenuItemImage itemFromNormalImage:@"inviteFriends_unpress.png" selectedImage:@"inviteFriends_press.png"
+                                                       target:self selector:@selector(inviteYourFriends:)];
+    
+    
+    localHighScoreImage = [CCMenuItemImage itemFromNormalImage:@"localscoreboard_unpress.png" selectedImage:@"localscoreboard_press.png"
+                                                   target:self selector:@selector(highScoreScene:)];
+    
+}
+
+
+- (void) setComponentsPositions
+{
+	float x = 768/2;
+	//float y = 1024 - 280.0f;
+	float y = 650.0;
+    float yGap = 90.0f;
+    
+	[newGameImage setPosition:CGPointMake(x, y)];
+	y = y - yGap;
+	
+	//[createMaze setPosition:CGPointMake(x, y)];
+	//y = y - yGap;
+	
+	[leaderboard setPosition:CGPointMake(x, y)];
+	y = y - yGap;
+    
+	[optionsImage setPosition:CGPointMake(x, y)];
+	y = y - yGap;
+	
+	[aboutImage setPosition:CGPointMake(x, y)];
+	y = y - yGap;
+	
+	[moreGamesImage setPosition:CGPointMake(x, y)];
+	y = y - yGap;
+	
+	[inviteFriendsImage setPosition:CGPointMake(x, y)];
+    
+    y = y - yGap;
+    
+    [localHighScoreImage setPosition:CGPointMake(x, y)];
+    
+}
+
+-(void)gamePlayScene:(id)sender
+{	
+	[MazeSounds playButtonTap];
+	//[[GameManager sharedGameManager] gamePlayScene];
+	
+	
+}
+
+- (void) levelSelectionScene:(id) sender
+{
+    [MazeSounds playButtonTap];
+    [[GameManager sharedGameManager] levelSelectionScene];
+}
+
+
+- (void) createMazeScene:(id) sender
+{
+    [MazeSounds playButtonTap];
+}
+
+
+- (void) showLeaderboard: (id) sender
+{
+	[[GameManager sharedGameManager].gameCenter showViewControllerLeaderBoard];
+    [MazeSounds playButtonTap];
+}
+
+
+-(void) inviteYourFriends:(id) sender
+{
+	[MazeSounds playButtonTap];
+    /*
+	
+	[[GameManager sharedGameManager] inviteYourFriends:nil];
+    
+	MailComposeViewController *mail = [[MailComposeViewController alloc] init];
+	//[self.navigationController pushViewController:mail animated:YES];
+	
+	//[mail presentModalViewController:mail animated:YES];
+	[[CCDirector sharedDirector].openGLView addSubview:mail.view];
+    
+	[mail sendEmail: EMAIL_SUBJECT message: EMAIL_MESSAGE imageFileName:@"Snakes&Ladders" andImage:[UIImage imageNamed:@"Default.png"]];
+	//[mail release];
+    */
+}
+
+- (void) moregamesUrl:(id) sender
+{
+	[MazeSounds playButtonTap];
+	
+	NSURL *url = [ [ NSURL alloc ] initWithString: @"http://www.envisionstudios.biz" ];
+	
+	[[UIApplication sharedApplication] openURL:url];
+}
+
+
+
+- (void) optionScene:(id) sender
+{
+	[MazeSounds playButtonTap];
+	
+	[[GameManager sharedGameManager] optionScene];
+    
+}
+
+
+-(void ) helpScene:(id) sender
+{
+	[MazeSounds playButtonTap];
+    
+	[[GameManager sharedGameManager] helpScene];
+}
+
+
+
+- (void) highScoreScene: (id) sender
+{
+    [MazeSounds playButtonTap];
+    [[GameManager sharedGameManager] highScoreScene];
+}
+
+- (void) dealloc
+{
+    NSLog(@"~ dealloc - MainMenuScene ~");
+    [headerLayer release];
+	[menu release];
+    
+    [super dealloc];
+}
+
+@end

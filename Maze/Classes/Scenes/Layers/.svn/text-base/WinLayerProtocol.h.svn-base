@@ -1,0 +1,28 @@
+//
+//  WinLayerProtocol.h
+//  Maze
+//
+//  Created by Ali Imran on 6/23/11.
+//  Copyright 2011 __MyCompanyName__. All rights reserved.
+//
+
+#import <Foundation/Foundation.h>
+
+
+
+@protocol LayerProtcol
+
+@required
+
+
+
+- (void) saveName: (NSString*) name;
+
+- (void) addWinLayer:(int) seconds;
+- (void) addLostLayer;
+- (void) addTiedLayer;
+
+
+- (void) removeWinLayer;
+
+@end

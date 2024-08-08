@@ -1,0 +1,24 @@
+//
+//  AdDisplayViewController.h
+//  iPuzzle
+//
+//  Created by Sajjad Raza on 8/27/10.
+//  Copyright 2010 Vizio-Mobile Inc. All rights reserved.
+//
+
+#import "GADBannerView.h"
+
+
+
+@interface AdDisplayViewController : UIViewController
+{
+	// Declare one as an instance variable
+	GADBannerView *bannerView_;
+
+
+
+}
+
+
+ 
+@end

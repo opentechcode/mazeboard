@@ -1,0 +1,630 @@
+//
+//  GameLayer.m
+//  Maze
+//
+//  Created by Ali Zafar on 4/28/11.
+//  Copyright 2011 __MyCompanyName__. All rights reserved.
+//
+
+#import "GameLayer.h"
+#import "GameManager.h"
+#import "Wall.h"
+#import "Constant.h"
+#import "GameSettings.h"
+#import "Utility.h"
+#import "HighScore.h"
+#import "MazeSounds.h"
+#import "SimpleAudioEngine.h"
+
+static void eachShape(void *ptr, void* unused)
+{
+	cpShape *shape = (cpShape*) ptr;
+	CCSprite *sprite = shape->data;
+	if( sprite ) {
+		
+		cpBody *body = shape->body;
+	
+		// TIP: cocos2d and chipmunk uses the same struct to store it's position
+		// chipmunk uses: cpVect, and cocos2d uses CGPoint but in reality the are the same
+		// since v0.7.1 you can mix them if you want.		
+		
+		[sprite setPosition: body->p];
+		
+		//[sprite setRotation: (float) CC_RADIANS_TO_DEGREES( -body->a )];
+	}
+}
+
+static void postStepCallBack(cpArbiter *arb, cpSpace *space, void *data)
+{
+    CP_ARBITER_GET_SHAPES(arb, a, b);
+    
+    //GameLayer *game = (GameLayer *) data;
+    //Ball *ball = (Ball *) b->body->data;
+    
+    //[game setSoundVolume:ball.body->v.x];
+}
+
+static int collisionCallBack(cpArbiter *arb, cpSpace *space, void *data)
+{
+    CP_ARBITER_GET_SHAPES(arb, a, b);
+    
+    static float prevX = CONST_BALL_X, prevY = CONST_BALL_Y;
+    
+    GameLayer *game = (GameLayer *) data;
+
+    Ball *ball = (Ball *) b->body->data;
+    
+    Wall *wall = (Wall *) a->body->data;
+    
+
+    float currX = ball.body->p.x;
+    float currY = ball.body->p.y;
+    
+    int diffX = fabs(currX - prevX);
+    int diffY = fabs(currY - prevY);
+    
+    //NSLog(@"diffX = %d", diffX);
+    //NSLog(@"diffY = %d", diffY);
+    
+    
+    if ( diffX < 10 && diffY > 10 && wall.wallorientation == CONST_WALL_ORIENTATION_HORIZONTAL) {
+        [game playCollisionSound];
+    } else if (diffY < 10 && diffX > 10 && wall.wallorientation == CONST_WALL_ORIENTATION_VERTICAL) {
+        [game playCollisionSound];
+    } else if (diffX > 10 && diffY > 10 && (wall.wallorientation == CONST_WALL_ORIENTATION_HORIZONTAL || wall.wallorientation == CONST_WALL_ORIENTATION_VERTICAL) ) {
+        [game playCollisionSound];
+    }
+    
+    prevX = currX;
+    prevY = currY;
+    
+    return 1;
+
+}
+
+
+@implementation GameLayer
+
+@synthesize mazeManager, timerLabel, timeLeft, gameType, gravity, level, winDelegate, menuDelegate;
+
+- (void) playCollisionSound
+{
+    [MazeSounds playCollisionSound];
+}
+
+
+- (void) playBallRollingSound: (id) senders
+{
+    [MazeSounds playBallRollingSound];
+}
+
+
+- (void) setSoundVolume
+{
+    
+    float avgVelocity = (fabs(ball.body->v.x) + fabs(ball.body->v.y))/2;
+    float volume = 0.0;
+    
+    if (avgVelocity <= 20) {
+        volume = 0.0;
+    } else if (avgVelocity > 20 && avgVelocity <= 50) {
+        volume = 1.0;
+    } else if (avgVelocity > 50 && avgVelocity <= 80) {
+        volume = 2.0;
+    } else if (avgVelocity > 80 && avgVelocity <= 110) {
+        volume = 3.0;
+    } else if (avgVelocity > 110 && avgVelocity <= 140) {
+    } else {
+        volume = 5.0;
+    }
+    
+    SimpleAudioEngine *engine = [SimpleAudioEngine sharedEngine];
+    [engine setBackgroundMusicVolume:volume];
+    
+    NSLog(@"avgVelocity %f", avgVelocity);
+    NSLog(@"volume = %f", volume);
+
+}
+
+- (id) initWithLevel:(NSString *) levelType
+{
+	self = [super init];
+	if (self != nil) {
+		
+        if ([GameSettings sharedGameSettings].manualStatus) {
+            self.isTouchEnabled = YES;
+            self.gravity = 0;
+        } else if ([GameSettings sharedGameSettings].accelerometerStatus) {
+            self.isAccelerometerEnabled = YES;
+            self.gravity = -50;
+            
+            
+            [self performSelector:@selector(playBallRollingSound:) withObject:nil afterDelay:2.0];
+            
+        }
+        
+		[self setupChipmunk];
+		
+        self.timerLabel = [CCLabelTTF labelWithString:@"00:00:00" fontName:@"Times New Roman" fontSize:CONST_FONT_TITLE_SIZE + 10];
+        [timerLabel setColor:ccc3(0, 0, 0)];
+        [timerLabel setPosition:CGPointMake(97, 30)];
+        [self addChild:timerLabel];
+		
+        
+        self.level = levelType;
+        
+        [self test:nil];
+		
+        [self schedule: @selector(step:)];
+                
+		MazeManager *tempMazeManager = [[MazeManager alloc] init];
+		self.mazeManager = tempMazeManager;
+		[tempMazeManager release];
+        [mazeManager createLevel:levelType];
+		[mazeManager runBacktrackAlgorithm];
+        
+        [self drawMaze:levelType];
+        [self drawConnectors];
+        [self drawBorder];
+        
+	}
+	return self;
+}
+
+
+- (void) setupChipmunk
+{
+    cpInitChipmunk();
+    
+    //CGSize winSize = [[CCDirector sharedDirector] winSize];
+    
+    space = cpSpaceNew();
+    cpSpaceResizeStaticHash(space, 400.0f, 40);
+    cpSpaceResizeActiveHash(space, 100.0f, 600);
+    
+    
+    space->gravity = ccp(0, gravity);
+    space->elasticIterations = space->iterations;
+    
+    /*
+    
+    cpBody *staticBody = cpBodyNew(INFINITY, INFINITY);
+    
+    cpShape *shape;
+    
+    // botom
+    shape = cpSegmentShapeNew(staticBody, ccp(0,0), ccp(winSize.width,0), 0.0f);
+    shape->e=1.0f; shape->u=1.0f;
+    shape->collision_type = 1;
+    cpSpaceAddStaticShape(space, shape);
+    
+    // top
+    shape = cpSegmentShapeNew(staticBody, ccp(0,winSize.height), ccp(winSize.width,winSize.height), 0.0f);
+    shape->e = 1.0f; shape->u = 1.0f;
+    shape->collision_type = 1;
+    cpSpaceAddStaticShape(space, shape);
+    
+    // left
+    shape = cpSegmentShapeNew(staticBody, ccp(0,0), ccp(0,winSize.height), 0.0f);
+    shape->e = 1.0f; shape->u = 1.0f;
+    shape->collision_type = 1;
+    cpSpaceAddStaticShape(space, shape);
+    
+    // right
+    shape = cpSegmentShapeNew(staticBody, ccp(winSize.width,0), ccp(winSize.width,winSize.height), 0.0f);
+    shape->e = 1.0f; shape->u = 1.0f;
+    shape->collision_type = 1;
+    cpSpaceAddStaticShape(space, shape);
+    
+    */
+    
+    cpSpaceAddCollisionHandler(space, 1, 3, (cpCollisionBeginFunc) collisionCallBack, NULL, NULL, NULL, self);
+    
+    //cpSpaceAddPostStepCallback(<#cpSpace *space#>, <#cpPostStepFunc func#>, <#void *obj#>, <#void *data#>);
+    //cpSpaceAddPostStepCallback(space, (cpPostStepFunc) postStepCallBack, NULL, NULL);
+}
+
+
+
+- (void) update: (ccTime) dt
+{
+	cpSpaceStep(space, dt);
+	[ball update];
+}
+
+
+- (void) startTimer:(id) sender
+{
+    
+    timeLeft = timeLeft + 1;
+    //[timerLabel setString:[NSString stringWithFormat:@"%i", timeLeft]];
+    
+    NSString *time = [Utility secondsToTimeConversion:timeLeft];
+    
+    [timerLabel setString:time];
+    
+}
+
+-(void) test:(id) sender
+{
+	
+	ball = [[Ball alloc] initWithSpace:space location:CGPointMake(CONST_BALL_X, CONST_BALL_Y) spriteFrameName:[NSString stringWithFormat:@"%@_ball.png", level]];
+	[self addChild:ball z:5];
+    
+    [self drawDestinationSprite];
+    
+    [self schedule:@selector(startTimer:) interval:1.0];
+}
+
+- (void) step: (ccTime) delta
+{	
+	int steps = 5;
+	CGFloat dt = delta/(CGFloat)steps;
+	
+	for(int i = 0; i < steps; i++){
+		cpSpaceStep(space, dt);
+	}
+    
+    if ([GameSettings sharedGameSettings].manualStatus) {
+        if ([self ifHasWonGame]) {
+            [[CCScheduler sharedScheduler] unscheduleSelector:@selector(step:) forTarget:self];
+            [self hasWonGame];
+        }
+    }
+	
+    
+    [self setSoundVolume];
+    
+	cpSpaceHashEach(space->activeShapes, &eachShape, nil);
+	cpSpaceHashEach(space->staticShapes, &eachShape, nil);
+}
+
+
+#pragma mark Maze Drawing Methods
+/*
+- (void) draw
+{
+	[super draw];
+	
+	for (Cell *cell in mazeManager.cells) {
+		
+		if (cell.bottomline==YES) {			
+			ccDrawLine(cell.point1, cell.point2);		
+		}
+		
+		if (cell.rightline==YES) {
+			
+			ccDrawLine(cell.point2, cell.point3);
+            
+		}
+		
+		if (cell.topline==YES) {
+			ccDrawLine(cell.point3, cell.point4);
+		}
+		
+		if (cell.leftline == YES) {
+			ccDrawLine(cell.point4, cell.point1);
+		}
+		
+		
+	}
+	
+}
+
+*/
+- (void) drawDestinationSprite
+{
+    // creating destination sprite 
+    
+    CCSprite *destination = [CCSprite spriteWithFile:[NSString stringWithFormat:@"%@_destination.png", level]];
+    
+    if ([level isEqualToString:@"easy"]) {
+        [destination setPosition:CGPointMake(CONST_DESTINATION_X - 8, CONST_DESTINATION_Y)];
+    } else if ([level isEqualToString:@"medium"]) {
+        [destination setPosition:CGPointMake(CONST_DESTINATION_X - 6, CONST_DESTINATION_Y - 2)];
+    } else {
+        [destination setPosition:CGPointMake(CONST_DESTINATION_X - 3, CONST_DESTINATION_Y - 3)];
+    }
+    
+    
+    [self addChild:destination z:0];
+    
+    
+    // adding destination sprite into space
+    
+    cpBody *destinationBody = cpBodyNewStatic();
+    destinationBody->p = destination.position;
+    
+    cpShape *destinationShape = cpCircleShapeNew(destinationBody, (destination.contentSize.width - 8)/2 , CGPointZero);
+    destinationShape->data = destination;
+    destinationShape->collision_type = 2;
+    
+    //cpSpaceAddStaticShape(space, destinationShape);
+}
+
+
+- (void) drawMaze: (NSString *) gameLevel
+{
+    
+    NSLog(@"gameLevel = %@", gameLevel);
+    
+    for (Cell *cell in mazeManager.cells) {
+        
+        if (cell.bottomline == YES) {			
+            //ccDrawLine(cell.point1, cell.point2);
+            
+            Wall *wall = [[Wall alloc] initWithSpace:space location:CGPointMake((cell.point1.x+cell.point2.x)/2, (cell.point1.y+cell.point2.y)/2) spriteFrameName:[NSString stringWithFormat:@"h_%@.png", gameLevel] andOrientation:CONST_WALL_ORIENTATION_HORIZONTAL];
+            [self addChild:wall];
+            [wall release];
+            
+			//NSLog(@"Bottom Line:x:%f , y:%f",(cell.point1.x+cell.point2.x)/2,(cell.point1.y+cell.point2.y)/2 );
+            
+        }
+        
+        if (cell.rightline == YES) {
+            
+            //ccDrawLine(cell.point2, cell.point3);
+            
+			if((cell.cellNumber)%mazeManager.cellsPerLine == (mazeManager.cellsPerLine-1))
+			{
+                
+                Wall *wall = [[Wall alloc] initWithSpace:space location:CGPointMake((cell.point2.x+cell.point3.x)/2, (cell.point2.y+cell.point3.y)/2) spriteFrameName:[NSString stringWithFormat:@"v_%@.png", gameLevel] andOrientation:CONST_WALL_ORIENTATION_VERTICAL];
+                [self addChild:wall];
+                [wall release];
+                
+			}
+        }
+        
+        if (cell.topline == YES) {
+            //ccDrawLine(cell.point3, cell.point4);
+            if (cell.cellNumber>=([mazeManager.cells count]-1-mazeManager.cellsPerLine )) {
+				Wall *wall = [[Wall alloc] initWithSpace:space location:CGPointMake((cell.point3.x+cell.point4.x)/2, (cell.point3.y+cell.point4.y)/2) spriteFrameName:[NSString stringWithFormat:@"h_%@.png", gameLevel] andOrientation:CONST_WALL_ORIENTATION_HORIZONTAL];
+				[self addChild:wall];
+				[wall release];
+			}
+        }
+        
+        if (cell.leftline == YES) {
+            //ccDrawLine(cell.point4, cell.point1);
+            
+            Wall *wall = [[Wall alloc] initWithSpace:space location:CGPointMake((cell.point4.x+cell.point1.x)/2, (cell.point4.y+cell.point1.y)/2) spriteFrameName:[NSString stringWithFormat:@"v_%@.png", gameLevel] andOrientation:CONST_WALL_ORIENTATION_VERTICAL];
+            [self addChild:wall];
+            [wall release];
+			
+			//CCLabelTTF *lbl=[CCLabelTTF labelWithString:[NSString stringWithFormat:@"y=%.0f",(cell.point2.y+cell.point3.y)/2] fontName:@"Arial" fontSize:10];
+			
+			/*[lbl setPosition:CGPointMake((cell.point4.x+cell.point1.x)/2, (cell.point4.y+cell.point1.y)/2)];
+             [self addChild:lbl z:10];
+             [lbl setColor:ccWHITE];
+			 */
+			//NSLog(@"Left Line:x:%f , y:%f",(cell.point1.x+cell.point2.x)/2,(cell.point1.y+cell.point2.y)/2 );
+        }
+    }
+}
+
+
+
+- (void) drawConnectors
+{
+    NSMutableArray *connectors = [mazeManager getConnectorsDetails];
+    [connectors retain];
+    NSLog(@"[connectors count] = %d", [connectors count]);
+    
+    for (int i = 0; i < [connectors count]; i++) {
+        
+        NSMutableDictionary *connectorDetails = [[NSMutableDictionary alloc] init];
+        
+        connectorDetails = [connectors objectAtIndex:i];
+        NSString *type = [connectorDetails valueForKey:@"type"];
+        CGPoint position = CGPointMake([[connectorDetails valueForKey:@"posX"] floatValue], [[connectorDetails valueForKey:@"posY"] floatValue]);
+        
+        
+        CCSprite *connector = [CCSprite spriteWithFile:[NSString stringWithFormat:@"%@.png", type]];
+        [connector setPosition:position];
+        [self addChild:connector];
+        
+    }
+}
+
+
+- (void) drawBorder
+{
+    CCSprite *border = [CCSprite spriteWithFile:@"border.png"];
+    [border setPosition:CGPointMake(768/2 - 2, 1024/2 - 17)];
+    [self addChild:border];
+}
+
+#pragma mark UIAccelerometer Methods
+
+- (void) onEnter
+{
+	[super onEnter];
+	[[UIAccelerometer sharedAccelerometer] setUpdateInterval:(1.0/40.0)];
+}
+
+
+- (void)accelerometer:(UIAccelerometer*)accelerometer didAccelerate:(UIAcceleration*)acceleration
+{
+    
+    if ([self ifHasWonGame]) {
+        
+        self.isAccelerometerEnabled = NO;
+        [self performSelector:@selector(hasWonGame) withObject:nil afterDelay:1.0];
+        
+    } else {
+        
+        
+#define kFilterFactor 0.7f
+        
+        float accelX = (float) acceleration.x ;
+        float accelY = (float) acceleration.y ;
+        
+        /*
+         static float prevX=0, prevY=0;
+         
+         float accelX = (float) acceleration.x * kFilterFactor + (1- kFilterFactor)*prevX;
+         float accelY = (float) acceleration.y * kFilterFactor + (1- kFilterFactor)*prevY;
+         
+         prevX = accelX;
+         prevY = accelY;
+         */
+        
+        CGPoint v = ccp( accelX, accelY);
+        
+        [ball applyForce:ccpMult(v, 3000)];
+        //space->gravity = ccpMult(v, 2000);
+        
+    }
+}
+
+
+
+#pragma mark Game Win Methods
+
+- (float) calcDistancePointA:(CGPoint)pointA andPointB:(CGPoint)pointB
+{
+    //NSLog(@"distance = %f", sqrtf(powf((pointB.x - pointA.x), 2) + powf((pointB.y - pointA.y), 2)));
+    return sqrtf(powf((pointB.x - pointA.x), 2) + powf((pointB.y - pointA.y), 2));
+}
+
+
+- (BOOL) ifHasWonGame
+{
+    float distance = [self calcDistancePointA:ball.position andPointB:CGPointMake(CONST_DESTINATION_X, CONST_DESTINATION_Y)];
+    
+    if (distance <= 10.0) {
+        
+        CGPoint v = ccp(CONST_DESTINATION_X, CONST_DESTINATION_Y);
+        
+        ball.visible = NO;
+        
+        CCSprite *sprite = [CCSprite spriteWithFile:[NSString stringWithFormat:@"%@_ball.png", level]];
+        [sprite setPosition:v];
+        [self addChild:sprite];
+        
+        id actionTo = [CCScaleTo actionWithDuration:0.20 scale:0.0f];
+        
+        [sprite runAction:actionTo];
+        
+        [[CCScheduler sharedScheduler] unscheduleAllSelectorsForTarget:self];
+        
+        return TRUE;
+    }
+    
+    return FALSE;
+    
+}
+
+- (void) hasWonGame
+{
+    
+    [winDelegate addWinLayer:timeLeft];
+	
+    
+    NSString *path = [[NSBundle mainBundle] pathForResource:@"Leaderboard" ofType:@"plist"];
+	NSDictionary *rootDict = [NSDictionary dictionaryWithContentsOfFile:path];
+	NSDictionary *controlType;
+	
+	if([GameSettings sharedGameSettings].accelerometerStatus) {
+		controlType = [[rootDict objectForKey:@"Accelerometer"] retain];
+		
+	} else {
+		controlType = [[rootDict objectForKey:@"Drag"] retain];
+	}
+    NSString *category=	[controlType objectForKey:level];
+    
+    [[GameManager sharedGameManager].gameCenter reportTheScore:timeLeft Category:category];
+    
+}
+
+
+
+#pragma mark Save Score Method
+
+
+- (void) saveScore
+{
+    HighScore *score = [[HighScore alloc] initwithName:@"xyz" Time:timeLeft];
+    
+    BOOL isAccelerometerSelected = [GameSettings sharedGameSettings].accelerometerStatus;
+    BOOL isDragSelected = [GameSettings sharedGameSettings].manualStatus;
+    
+    if (isAccelerometerSelected && [level isEqualToString:@"easy"]) {
+        [[GameManager sharedGameManager].highScoreManager.easyAccelerometer addObject:score];
+    } else if (isAccelerometerSelected && [level isEqualToString:@"medium"]) {
+        [[GameManager sharedGameManager].highScoreManager.mediumAccelerometer addObject:score];
+    } else if (isAccelerometerSelected && [level isEqualToString:@"hard"]) {
+        [[GameManager sharedGameManager].highScoreManager.hardAccelerometer addObject:score];
+    } else if (isDragSelected && [level isEqualToString:@"easy"]) {
+        [[GameManager sharedGameManager].highScoreManager.easyDrag addObject:score];
+        
+    } else if (isDragSelected && [level isEqualToString:@"medium"]) {
+        [[GameManager sharedGameManager].highScoreManager.mediumDrag addObject:score];
+    } else if (isDragSelected && [level isEqualToString:@"hard"]) {
+        [[GameManager sharedGameManager].highScoreManager.hardDrag addObject:score];
+    }
+    
+    
+    [[GameManager sharedGameManager].highScoreManager saveAllScores];
+    
+    NSLog(@"size easy drag = %d", [[GameManager sharedGameManager].highScoreManager.easyDrag count]);
+    
+}
+
+
+#pragma mark Touch Delegate Methods
+
+
+- (void) registerWithTouchDispatcher {
+    [[CCTouchDispatcher sharedDispatcher] addTargetedDelegate:self priority:0 swallowsTouches:YES];
+}
+
+
+- (BOOL)ccTouchBegan:(UITouch *)touch withEvent:(UIEvent *)event {
+    CGPoint touchLocation = [self convertTouchToNodeSpace:touch];
+    
+    int a = 50;
+    
+    CGRect ballArea = CGRectMake(ball.position.x - a, ball.position.y - a, [ball boundingBox].size.width + a + a, [ball boundingBox].size.height + a + a);
+    
+    if (CGRectContainsPoint(ballArea, touchLocation)) {
+        mouse = cpMouseNew(space);
+        cpMouseGrab(mouse, ball.position, false);
+        return TRUE;
+    }
+    
+    return FALSE;
+}
+
+- (void)ccTouchMoved:(UITouch *)touch withEvent:(UIEvent *)event {
+    CGPoint touchLocation = [self convertTouchToNodeSpace:touch];
+    cpMouseMove(mouse, touchLocation);
+}
+
+- (void)ccTouchEnded:(UITouch *)touch withEvent:(UIEvent *)event {
+    cpMouseRelease(mouse);
+}
+
+- (void)ccTouchCancelled:(UITouch *)touch withEvent:(UIEvent *)event {
+    cpMouseRelease(mouse);    
+}
+
+
+- (void) dealloc
+{
+    
+    NSLog(@"~ dealloc - GameLayer ~");
+    
+    cpSpaceFree(space);
+    space = NULL;
+    [ball release];
+    [level release];
+    level = nil;
+	[timerLabel release];
+    [mazeManager release];
+    
+	[super dealloc];
+}
+
+@end
+

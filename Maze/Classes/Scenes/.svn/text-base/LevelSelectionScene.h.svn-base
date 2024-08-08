@@ -1,0 +1,37 @@
+//
+//  LevelSelectionScene.h
+//  Maze
+//
+//  Created by Ali Imran on 5/12/11.
+//  Copyright 2011 __MyCompanyName__. All rights reserved.
+//
+
+#import <Foundation/Foundation.h>
+
+#import "HeaderLayer.h"
+
+@interface LevelSelectionScene : CCScene {
+    
+    HeaderLayer *headerLayer;
+    
+    CCMenuItemImage *easy;
+    CCMenuItemImage *medium;
+    CCMenuItemImage *hard;
+    
+    CCMenuItemImage *mainMenu;
+    
+}
+
+
+@property (nonatomic, retain) HeaderLayer *headerLayer;
+
+@property (nonatomic, retain) CCMenuItemImage *easy;
+@property (nonatomic, retain) CCMenuItemImage *medium;
+@property (nonatomic, retain) CCMenuItemImage *hard;
+@property (nonatomic, retain) CCMenuItemImage *mainMenu;
+
+
+- (void) generateGameStartTime;
+- (void) getSize;
+
+@end

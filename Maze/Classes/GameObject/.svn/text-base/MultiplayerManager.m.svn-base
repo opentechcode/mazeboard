@@ -1,0 +1,648 @@
+//
+//  MultiplayerManager.m
+//  Maze
+//
+//  Created by Ali Imran on 7/11/11.
+//  Copyright 2011 __MyCompanyName__. All rights reserved.
+//
+
+#import "MultiplayerManager.h"
+#import "GameManager.h"
+#import "Constant.h"
+
+@implementation MultiplayerManager
+
+@synthesize gameState, newMatch, session, localPlayerSelectionTime, remotePlayerSelectionTime, multiplayerGameType, gameLevel, mazeManager, gamePlayDelegate, localGameFinishTime, remoteGameFinishTime, isGameOver, counter, gameMode;
+
+
+- (id) init {
+    self = [super init];
+    
+    if (self) {
+        
+        gameState = CONST_GAME_STATE_INITIALIZE;
+        
+		localPlayerSelectionTime = 0;
+		remotePlayerSelectionTime = 0;
+		
+		multiplayerGameType = CONST_MULTIPLAYER_GAME_TYPE_LOCALWIFI;
+		session = nil;
+        
+        MazeManager *temp = [[MazeManager alloc] init];
+        self.mazeManager = temp;
+        [temp release];        
+        
+        NSString *string = [[NSString alloc] init];
+        gameLevel = string;
+        [string release];
+        
+        NSString *tempString = [[NSString alloc] init];
+        gameMode = tempString;
+        [tempString release];
+        
+        localGameFinishTime = 0;
+        remoteGameFinishTime = 0;
+        
+        counter = 0;
+        
+    }
+    
+    return self;
+}
+
+
+- (void) startGame
+{
+	gameState = CONST_GAME_STATE_INITIALIZE;
+    
+    NSLog(@"newMatch.expectedPlayerCount = %d", newMatch.expectedPlayerCount);
+    
+	if (newMatch && newMatch.expectedPlayerCount == 0) {
+        
+        if ([GameManager sharedGameManager].gameCenter.isInvited) {
+       
+            [self sendHandShakeMessage];
+        }
+        
+        [GameManager sharedGameManager].gameCenterSelected = YES;
+        multiplayerGameType = CONST_MULTIPLAYER_GAME_TYPE_GAMECENTER;
+        
+	}
+}
+
+
+
+- (void) generateGameStartTime
+{
+   // NSTimeInterval date = [NSDate timeIntervalSinceReferenceDate];
+	//long val = date;
+	self.localPlayerSelectionTime = [NSDate timeIntervalSinceReferenceDate] + arc4random() % 100;
+    
+    NSLog(@"localPlayerSelectionTime = %ld", localPlayerSelectionTime);
+    
+}
+
+
+- (NSMutableArray *) fillArray:(int) messageNo
+{
+    int endIndex;
+    
+    int startIndex;
+    
+    if (messageNo == 1) {
+        startIndex = 0;
+        endIndex = 300;
+    } else if (messageNo == 2) {
+        startIndex = 300;
+        endIndex = 576;
+    }
+    
+    NSMutableArray *cells = [[NSMutableArray alloc] init];
+    
+    for (int i = startIndex; i < endIndex; i++) {
+        [cells addObject:[mazeManager.cells objectAtIndex:i]];
+    }
+    
+    return cells;
+}
+
+
+
+
+- (void) processData: (NSData*) data
+{
+    
+    NSDictionary *messageDict = (NSDictionary *) [NSKeyedUnarchiver unarchiveObjectWithData:data];
+    
+    if ([[messageDict objectForKey:CONST_MESSAGE_TYPE] intValue] == CONST_MESSAGE_TYPE_HAND_SHAKE) {
+        
+        NSLog(@"Hand Shake Message Received");
+        
+        if ([gameLevel isEqualToString:@"hard"]) {
+            
+            [self sendStartHardGameMessage:1];
+            [self sendStartHardGameMessage:2];
+            
+        } else {
+            
+            [self sendStartGamePlayMessage];
+            
+        }
+        
+        [[GameManager sharedGameManager] gamePlayScene:gameLevel];
+        
+    } else if ([[messageDict objectForKey:CONST_MESSAGE_TYPE] intValue] == CONST_MESSAGE_TYPE_START_GAME_PLAY) {
+        
+        NSLog(@"Start Game Message Received");
+        
+        if ([GameManager sharedGameManager].gameCenter.isInvited) {
+            
+            gameLevel = [messageDict objectForKey:CONST_KEY_GAME_LEVEL];
+            gameMode = [messageDict objectForKey:CONST_KEY_GAME_MODE];
+            
+            if ([gameMode isEqualToString:@"acc"]) {
+                
+                [GameManager sharedGameManager].multiplayerGameMode = CONST_MULTIPLAYER_GAME_MODE_ACCELEROMETER;
+                
+            } else if ([gameMode isEqualToString:@"drag"]) {
+                
+                [GameManager sharedGameManager].multiplayerGameMode = CONST_MULTIPLAYER_GAME_MODE_DRAG;
+                
+            }
+            
+            NSDictionary *mazeManagerDict = [messageDict objectForKey:CONST_KEY_MAZE];
+            mazeManager.cellsPerLine = [[mazeManagerDict objectForKey:@"cellsPerLine"] intValue];
+            mazeManager.cells = [mazeManagerDict objectForKey:@"cells"];
+            
+            [[GameManager sharedGameManager] gamePlayScene:gameLevel];
+            
+        } else {
+            
+            remotePlayerSelectionTime = [[messageDict objectForKey:CONST_KEY_GAME_START_TIME] longValue];
+            
+            if (remotePlayerSelectionTime < localPlayerSelectionTime) {
+                
+                NSDictionary *mazeManagerDict = [messageDict objectForKey:CONST_KEY_MAZE];
+                mazeManager.cellsPerLine = [[mazeManagerDict objectForKey:@"cellsPerLine"] intValue];
+                mazeManager.cells = [mazeManagerDict objectForKey:@"cells"];
+                
+                [[GameManager sharedGameManager] gamePlayScene:gameLevel];
+                
+            } else if (remotePlayerSelectionTime > localPlayerSelectionTime) {
+                
+                [[GameManager sharedGameManager] gamePlayScene:gameLevel];
+                
+            } else {
+                
+                [self sendStartGamePlayMessage];
+                
+            }
+            
+        }
+        
+        
+    } else if ([[messageDict objectForKey:CONST_MESSAGE_TYPE] intValue] == CONST_MESSAGE_TYPE_MOVE_PLAYER) {
+        
+        float posX = [[messageDict objectForKey:CONST_KEY_BALL_POS_X] floatValue];
+        float posY = [[messageDict objectForKey:CONST_KEY_BALL_POS_Y] floatValue];
+        
+        [gamePlayDelegate updateRemotePlayerPositionX:posX andPositionY:posY];
+        
+    } else if ([[messageDict objectForKey:CONST_MESSAGE_TYPE] intValue] == CONST_MESSAGE_TYPE_GAME_WIN) {
+        
+        if (gameState == CONST_GAME_STATE_INITIALIZE) {
+            
+            [gamePlayDelegate addMatchLostLayer];
+            [self sendGameLostMessage];
+            gameState = CONST_GAME_STATE_LOST;
+            
+        } else if (gameState == CONST_GAME_STATE_WON) {
+            
+            [gamePlayDelegate addMatchTiedLayer];
+            
+        }
+        
+    } else if ([[messageDict objectForKey:CONST_MESSAGE_TYPE] intValue] == CONST_MESSAGE_TYPE_GAME_LOST) {
+        
+        if (gameState == CONST_GAME_STATE_WON) {
+            
+            [gamePlayDelegate addMatchWinLayer:localGameFinishTime];
+            
+        }
+        
+    } else if ([[messageDict objectForKey:CONST_MESSAGE_TYPE] intValue] == CONST_MESSAGE_TYPE_START_HARD_GAME) {
+        
+        [self procressHardGameMessage:messageDict];
+    }
+}
+
+
+
+- (void) procressHardGameMessage:(NSDictionary *) messageDict
+{
+    
+    if ([GameManager sharedGameManager].gameCenter.isInvited) {
+        int messageNo = [[messageDict objectForKey:CONST_KEY_MESSAGE_NUMBER] intValue];
+        
+        NSDictionary *mazeManagerDict = [messageDict objectForKey:CONST_KEY_MAZE];
+        
+        if (messageNo == 1) {
+            
+            mazeManager.cellsPerLine = [[mazeManagerDict objectForKey:@"cellsPerLine"] intValue];
+            mazeManager.cells = [mazeManagerDict objectForKey:@"cells"];
+            
+        } else if (messageNo == 2) {
+            
+            NSMutableArray *array = [mazeManagerDict objectForKey:@"cells"];
+            int size = [array count];
+            
+            for (int i = 0; i < size; i++) {
+                [mazeManager.cells addObject:[array objectAtIndex:i]];
+            }
+            [[GameManager sharedGameManager] gamePlayScene:gameLevel]; 
+        }
+        
+        
+    } else {
+        
+        remotePlayerSelectionTime = [[messageDict objectForKey:CONST_KEY_GAME_START_TIME] longValue];
+        int messageNo = [[messageDict objectForKey:CONST_KEY_MESSAGE_NUMBER] intValue];
+        
+        if (remotePlayerSelectionTime < localPlayerSelectionTime) {
+            
+            NSDictionary *mazeManagerDict = [messageDict objectForKey:CONST_KEY_MAZE];
+            
+            if (messageNo == 1) {
+                
+                mazeManager.cellsPerLine = [[mazeManagerDict objectForKey:@"cellsPerLine"] intValue];
+                mazeManager.cells = [mazeManagerDict objectForKey:@"cells"];
+                
+            } else if (messageNo == 2) {
+                
+                NSMutableArray *array = [mazeManagerDict objectForKey:@"cells"];
+                int size = [array count];
+                
+                for (int i = 0; i < size; i++) {
+                    [mazeManager.cells addObject:[array objectAtIndex:i]];
+                }
+                [[GameManager sharedGameManager] gamePlayScene:gameLevel]; 
+            }
+            
+        } else if (remotePlayerSelectionTime > localPlayerSelectionTime) {
+            
+            [[GameManager sharedGameManager] gamePlayScene:gameLevel];
+        } else {
+            [self sendStartHardGameMessage:1];
+            [self sendStartHardGameMessage:2];
+        }
+        
+    }
+    
+}
+
+
+#pragma mark Message Sending Methods
+
+
+- (void) sendStartGamePlayMessage
+{
+    
+    [self generateGameStartTime];
+        
+    NSNumber *timeInterval = [NSNumber numberWithLong:localPlayerSelectionTime];
+    
+    NSNumber *cellsPerLine = [NSNumber numberWithInt:mazeManager.cellsPerLine];
+    
+    NSDictionary *mazeManagerDict = [[NSDictionary alloc] initWithObjects:[NSArray arrayWithObjects:cellsPerLine, mazeManager.cells, nil] forKeys:[NSArray arrayWithObjects:@"cellsPerLine", @"cells", nil]];
+    
+	NSDictionary *dict = [[NSDictionary alloc] initWithObjects:[NSArray arrayWithObjects:[NSNumber numberWithInt:CONST_MESSAGE_TYPE_START_GAME_PLAY], timeInterval, mazeManagerDict, gameLevel, gameMode, nil] forKeys:[NSArray arrayWithObjects:CONST_MESSAGE_TYPE, CONST_KEY_GAME_START_TIME, CONST_KEY_MAZE, CONST_KEY_GAME_LEVEL , CONST_KEY_GAME_MODE, nil]];
+    
+    NSData *data = [NSKeyedArchiver archivedDataWithRootObject:dict];
+        
+	if ([self sendData:data]) {		
+		NSLog(@"Start Game Message Sent!");
+	} else {
+		NSLog(@"Start Game Message Sending Failed!");
+	}
+    
+}
+
+
+
+- (void) sendStartHardGameMessage: (int) messageNo
+{
+    if (messageNo == 1) {
+        [self generateGameStartTime];
+    }
+    
+    NSNumber *timeInterval = [NSNumber numberWithLong:localPlayerSelectionTime];
+    
+    NSNumber *cellsPerLine = [NSNumber numberWithInt:mazeManager.cellsPerLine];
+    
+    NSMutableArray *cells = [self fillArray:messageNo];
+    
+    NSDictionary *mazeManagerDict = [[NSDictionary alloc] initWithObjects:[NSArray arrayWithObjects:cellsPerLine, cells, nil] forKeys:[NSArray arrayWithObjects:@"cellsPerLine", @"cells", nil]];
+    
+	NSDictionary *dict = [[NSDictionary alloc] initWithObjects:[NSArray arrayWithObjects:[NSNumber numberWithInt:CONST_MESSAGE_TYPE_START_HARD_GAME], [NSNumber numberWithInt:messageNo], timeInterval, mazeManagerDict, nil] forKeys:[NSArray arrayWithObjects:CONST_MESSAGE_TYPE, CONST_KEY_MESSAGE_NUMBER, CONST_KEY_GAME_START_TIME, CONST_KEY_MAZE, nil]];
+    
+    NSData *data = [NSKeyedArchiver archivedDataWithRootObject:dict];
+    
+	if ([self sendData:data]) {		
+		NSLog(@"Start Hard Game Message Sent!");
+	} else {
+		NSLog(@"Start Hard Game Message Sending Failed!");
+	}
+    
+}
+
+- (void) sendMovePlayerMessage:(float)posX andPosY:(float)posY
+{
+    
+    NSNumber *positionX = [NSNumber numberWithFloat:posX];
+    NSNumber *positionY = [NSNumber numberWithFloat:posY];
+    
+    NSDictionary *dict = [[NSDictionary alloc] initWithObjects:[NSArray arrayWithObjects:[NSNumber numberWithInt:CONST_MESSAGE_TYPE_MOVE_PLAYER], positionX, positionY, nil] forKeys:[NSArray arrayWithObjects:CONST_MESSAGE_TYPE, CONST_KEY_BALL_POS_X, CONST_KEY_BALL_POS_Y, nil]];
+    
+    NSData * data = [NSKeyedArchiver archivedDataWithRootObject:dict];
+    
+	if ([self sendData:data]) {		
+		//NSLog(@"Move Player Message Sent!");
+	} else {
+		NSLog(@"Move Player Message Sending Failed!");
+	}
+    
+}
+
+
+
+- (void) sendGameWinMessage: (int) time
+{
+    NSDictionary *dict = [[NSDictionary alloc] initWithObjects:[NSArray arrayWithObjects:[NSNumber numberWithInt:CONST_MESSAGE_TYPE_GAME_WIN], nil] forKeys:[NSArray arrayWithObjects:CONST_MESSAGE_TYPE, nil]];
+    
+    NSData *data = [NSKeyedArchiver archivedDataWithRootObject:dict];
+    
+    if ([self sendData:data]) {
+        NSLog(@"Game Win Message Sent!");
+    } else {
+        NSLog(@"Game Win Message Sending Failed!");
+    }    
+}
+
+
+- (void) sendGameLostMessage
+{
+    NSDictionary *dict = [[NSDictionary alloc] initWithObjects:[NSArray arrayWithObjects:[NSNumber numberWithInt:CONST_MESSAGE_TYPE_GAME_LOST], nil] forKeys:[NSArray arrayWithObjects:CONST_MESSAGE_TYPE, nil]];
+    
+    NSData *data = [NSKeyedArchiver archivedDataWithRootObject:dict];
+    
+    if ([self sendData:data]) {
+        NSLog(@"Game Lost Message Sent!");
+    } else {
+        NSLog(@"Game Lost Message Sending Failed!");
+    }
+}
+
+
+
+
+- (BOOL) sendHandShakeMessage
+{
+    NSDictionary *dict = [[NSDictionary alloc] initWithObjects:[NSArray arrayWithObjects:[NSNumber numberWithInt:CONST_MESSAGE_TYPE_HAND_SHAKE], nil] forKeys:[NSArray arrayWithObjects:CONST_MESSAGE_TYPE, nil]];
+    
+    NSData *data = [NSKeyedArchiver archivedDataWithRootObject:dict];
+    
+    if ([self sendData:data]) {
+        
+        NSLog(@"Hand Shake Message Sent!");
+        counter = 0;
+        return TRUE;
+        
+    } else {
+        
+        NSLog(@"Hand Shake Message Sending Failed!");
+        
+        if (counter <= 10) {
+            
+            [self performSelector:@selector(sendHandShakeMessageSelector:) withObject:nil afterDelay:1.0];
+            counter++;
+            
+        } else {
+            counter = 0;
+        }
+        
+        
+    }
+    
+    
+    return FALSE;
+}
+
+
+
+
+- (void) sendHandShakeMessageSelector:(id) sender
+{
+    [self sendHandShakeMessage];
+    
+}
+
+
+
+#pragma mark match delegate functions
+
+- (void)match:(GKMatch *)match didReceiveData:(NSData *)data fromPlayer:(NSString *) playerID
+{	
+    //NSLog(@"Data Received");
+	[self processData:data];
+	
+}
+
+- (void)match:(GKMatch *)match player:(NSString *)playerID didChangeState:(GKPlayerConnectionState)state
+{
+	switch (state) {
+		case GKPlayerStateConnected:
+			
+            NSLog(@"Player Connected");
+			[GameManager sharedGameManager].gameCenterSelected = YES;
+            [GameManager sharedGameManager].gameCenter.multiplayerManager.multiplayerGameType = CONST_MULTIPLAYER_GAME_TYPE_GAMECENTER;
+            [GameManager sharedGameManager].gameCenter.isInvited = NO;
+            
+            if ([gameLevel isEqualToString:@"hard"]) {
+                [self sendStartHardGameMessage:1];
+                [self sendStartHardGameMessage:2];
+            } else {
+                [self sendStartGamePlayMessage];
+            }
+            
+            break;
+			
+		case GKPlayerStateDisconnected:
+			
+            
+            
+            if (gameState == CONST_GAME_STATE_INITIALIZE) {
+                [self otherPlayerLeft];
+            }
+            
+            [self leaveMatch];
+            
+            NSLog(@"Player Disconnected");
+            
+            
+			break;
+			
+		default:
+			break;
+	}
+	
+	
+}
+
+// The match was unable to connect with the player due to an error.
+- (void)match:(GKMatch *)match connectionWithPlayerFailed:(NSString *)playerID withError:(NSError *)error
+{
+	
+}
+
+// The match was unable to be established with any players due to an error.
+- (void)match:(GKMatch *)match didFailWithError:(NSError *)error
+{
+	
+}
+
+
+
+#pragma mark Data Received from local peer
+
+
+- (void)receiveData:(NSData *)data fromPeer:(NSString *)peer inSession:(GKSession *)session context:(void *)context 
+{ 
+	[self processData:data];
+	
+}
+
+
+
+- (void) setLocalWifiDataHandler
+{
+	[session setDataReceiveHandler:self withContext:NULL];
+}
+
+
+
+
+#pragma mark GKSessionDelegate method
+
+- (void)session:(GKSession *)session peer:(NSString *)peerID didChangeState:(GKPeerConnectionState)state 
+{
+	
+	switch (state) {
+            
+        case GKPeerStateDisconnected:
+            
+			NSLog(@"Player Disconnected");
+            
+            if (gameState == CONST_GAME_STATE_INITIALIZE) {
+                [self otherPlayerLeft];
+            }
+            
+            [self leaveMatch];
+			
+			break;
+            
+        case GKPeerStateConnected:
+			NSLog(@"Player Connected");
+            
+            multiplayerGameType = CONST_MULTIPLAYER_GAME_TYPE_LOCALWIFI;
+            [GameManager sharedGameManager].localWifiSelected = YES;
+            
+            if ([gameLevel isEqualToString:@"hard"]) {
+                [self sendStartHardGameMessage:1];
+                [self sendStartHardGameMessage:2];
+            } else {
+                [self sendStartGamePlayMessage];
+            }
+            
+   			break;
+			
+		default:
+			break;
+	}
+	
+}
+
+
+- (void) invalidateSession
+{
+	if (session != nil) {
+		[session disconnectFromAllPeers]; 
+		session.available = NO; 
+		[session setDataReceiveHandler: nil withContext: NULL]; 
+		session.delegate = nil; 
+		session = nil;
+	}
+}
+
+
+
+#pragma mark Sending Data at appropreate node;
+
+- (BOOL) sendData:(NSData *) data
+{
+	if (multiplayerGameType == CONST_MULTIPLAYER_GAME_TYPE_GAMECENTER) {
+		return [self sendGameCenterData:data];	
+	}
+	
+	return [self sendLocalWifiData:data];
+}
+
+
+
+- (BOOL) sendGameCenterData:(NSData *) data
+{
+	NSError *error;
+	if(![newMatch sendDataToAllPlayers:data withDataMode:GKMatchSendDataReliable error:&error]) {
+		NSLog(@"%@", error);
+		//[self leaveMatch];
+		return NO;
+	}
+	
+	return YES;
+}
+
+
+- (BOOL) sendLocalWifiData:(NSData *) data
+{
+	NSError *error;
+	
+	if(![session sendDataToAllPeers:data withDataMode:GKSendDataReliable error:&error]) {
+		//NSLog(@"%@", error);
+		//[self leaveMatch];
+		return NO;
+	}
+    return YES;
+}
+
+
+
+#pragma mark Leave Game Methods
+
+- (void) leaveMatch
+{
+    
+    NSLog(@"leaveMatch");
+    
+    [mazeManager.cells removeAllObjects];
+    
+    self.gamePlayDelegate = nil;
+    
+    [newMatch disconnect];
+    newMatch.delegate = nil;
+    
+    if (multiplayerGameType == CONST_MULTIPLAYER_GAME_TYPE_LOCALWIFI) {
+        [self invalidateSession];
+    }
+    
+}
+
+- (void) otherPlayerLeft
+{
+    [[GameManager sharedGameManager] removeAd];
+    [Utility showAlertViewWithTitle:@"!"
+						 andMessage:@"Other player has left!"];
+    [gamePlayDelegate otherPlayerLeft];
+	[[GameManager sharedGameManager] mainMenuScene];
+	
+    
+}
+
+- (void) dealloc {
+    
+    [newMatch release];
+    //[session release];
+    [mazeManager release];
+    [super dealloc];
+}
+
+
+@end

@@ -1,0 +1,58 @@
+//
+//  GameManager.h
+//  Maze
+//
+//  Created by Ali Imran on 5/3/11.
+//  Copyright 2011 __MyCompanyName__. All rights reserved.
+//
+
+#import <Foundation/Foundation.h>
+#import "AdDisplayViewController.h"
+<<<<<<< .mine
+#import "GameCenter.h"
+=======
+#import "HighScoreManager.h"
+>>>>>>> .r182
+
+@interface GameManager : NSObject {
+    
+	AdDisplayViewController *adDisplayViewController;
+    BOOL isGamePaused;
+<<<<<<< .mine
+	GameCenter *gameCenter;
+=======
+    
+    HighScoreManager *highScoreManager;
+    
+>>>>>>> .r182
+}
+
+
+@property (nonatomic, retain) AdDisplayViewController *adDisplayViewController;
+@property (readwrite) BOOL isGamePaused;
+<<<<<<< .mine
+@property (nonatomic, retain)GameCenter *gameCenter;
+=======
+@property (nonatomic, retain) HighScoreManager *highScoreManager;
+>>>>>>> .r182
+
+
++ (GameManager *) sharedGameManager;
+
+- (void) startGame;
+
+- (void) mainMenuScene;
+//- (void) gamePlayScene;
+- (void) optionScene;
+- (void) helpScene;
+
+- (void) gamePlayScene:(NSString*) level;
+- (void) saveGameSettings;
+- (void) levelSelectionScene;
+- (void) loadGameSettings;
+- (void) displayAd;
+- (void) removeAd;
+
+- (void) highScoreScene;
+
+@end

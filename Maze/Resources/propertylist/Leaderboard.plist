@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Accelerometer</key>
+	<dict>
+		<key>easy</key>
+		<string>Easy_Accelerometer_Maze</string>
+		<key>medium</key>
+		<string>Medium_Accelerometer_Maze</string>
+		<key>hard</key>
+		<string>Hard_Accelerometer_Maze</string>
+	</dict>
+	<key>Drag</key>
+	<dict>
+		<key>easy</key>
+		<string>Easy_Drag_Maze</string>
+		<key>medium</key>
+		<string>Medium_Drag_Maze</string>
+		<key>hard</key>
+		<string>Hard_Drag_Maze</string>
+	</dict>
+</dict>
+</plist>

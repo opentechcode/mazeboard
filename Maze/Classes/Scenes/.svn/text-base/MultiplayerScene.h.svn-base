@@ -1,0 +1,41 @@
+//
+//  MultiplayerScene.h
+//  Maze
+//
+//  Created by Ali Imran on 7/11/11.
+//  Copyright 2011 __MyCompanyName__. All rights reserved.
+//
+
+#import <Foundation/Foundation.h>
+
+#import "HeaderLayer.h"
+
+@interface MultiplayerScene : CCScene {
+    
+    
+    HeaderLayer *headerLayer;
+    
+    CCMenuItemImage *localArea;
+	CCMenuItemImage *gamecenter;
+	CCMenuItemImage *mainMenu;
+    CCMenuItemImage *back;
+    
+    int gameType;
+    
+}
+
+@property (nonatomic, readwrite) int gameType;
+
+@property (nonatomic, retain) HeaderLayer *headerLayer;
+
+@property (nonatomic, retain) CCMenuItemImage *localArea;
+@property (nonatomic, retain) CCMenuItemImage *gamecenter;
+@property (nonatomic, retain) CCMenuItemImage *mainMenu;
+@property (nonatomic, retain) CCMenuItemImage *back;
+
+- (id) initWithGameType: (int) gameType;
+- (void) setPositions;
+
+- (void) generateGameStartTime;
+
+@end
